@@ -2,7 +2,14 @@
      xmlns:xlink="http://www.w3.org/1999/xlink"><style type="text/css">
 svg {
   font-family: 'Open Sans', sans-serif;
+  font-size: 16px;
+  opacity: 1;
 }
+
+text {
+  fill: #111;
+}
+
 .axis path,
 .axis line {
   fill: none;
@@ -41,8 +48,8 @@ svg {
 }
 
 .data-point-2 {
-  fill: #EBC925;
-  stroke: #EBC925;
+  fill: #FF8C03;
+  stroke: #FF8C03;
   stroke-width: 2.5px;
 }
 

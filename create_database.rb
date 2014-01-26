@@ -2,7 +2,7 @@ require 'sqlite3'
 require 'json'
 require 'pry'
 
-db = SQLite3::Database.new('experiment-snapshot.sqlite')
+db = SQLite3::Database.new('experiment-archive.sqlite')
 db_result = SQLite3::Database.new('experiment-result.sqlite')
 
 tweets = db.execute('SELECT * FROM tweets')

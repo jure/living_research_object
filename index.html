@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" type="text/css" href="http://fonts.googleapis.com/css?family=Noto+Serif:400,700,400italic|Open+Sans:700,400">
+</head>
+<body>
+<style>
+svg {
+  font-family: 'Open Sans', sans-serif;
+  font-size: 16px;
+  opacity: 1;
+}
+.axis path,
+.axis line {
+  fill: none;
+  stroke: #000;
+  shape-rendering: crispEdges;
+}
+/*
+.x.axis path {
+  display: none;
+}*/
+
+.line {
+  fill: none;
+  stroke: steelblue;
+  stroke-width: 1.5px;
+}
+.cloudy {
+  color: gray;
+}
+.sunny {
+  color: #FF8C03;
+}
+
+.data-point {
+  fill: none;
+  stroke: orange;
+  stroke-width: 2.5px;
+}
+
+.grid .tick {
+    stroke: lightgrey;
+    opacity: 0.7;
+}
+.grid path {
+      stroke-width: 0;
+}
+
+.data-point-2 {
+  fill: #FF8C03;
+  stroke: #FF8C03;
+  stroke-width: 2.5px;
+}
+
+</style>
+<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.2.10/angular.min.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.2.10/angular-resource.min.js"></script>
+<script src="http://d3js.org/d3.v3.min.js"></script>
+<script src="http://localhost:8080/socket.io/socket.io.js"></script>
+
+<script>
+
+angular.module('d3', [])
+  .factory('d3Service', ['$document', '$q', '$rootScope',
+    function($document, $q, $rootScope) {
+      var d = $q.defer();
+      function onScriptLoad() {
+        // Load client in the browser
+        $rootScope.$apply(function() { d.resolve(window.d3); });
+      }
+      // Create a script tag with d3 as the source
+      // and call our onScriptLoad callback when it
+      // has been loaded
+      var scriptTag = $document[0].createElement('script');
+      scriptTag.type = 'text/javascript'; 
+      scriptTag.async = true;
+      scriptTag.src = 'http://' + 'd3js.org/d3.v3.min.js';
+      scriptTag.onreadystatechange = function () {
+        if (this.readyState == 'complete') onScriptLoad();
+      }
+      scriptTag.onload = onScriptLoad;
+
+      var s = $document[0].getElementsByTagName('body')[0];
+      s.appendChild(scriptTag);
+
+      return {
+        d3: function() { return d.promise; }
+      };
+}]);
+
+var weatherApp = angular.module('weatherApp', ['d3']);
+  
+weatherApp.directive('d3Bars', ['$window', 'd3Service', '$timeout', function($window, d3Service, $timeout) {
+    return {
+      restrict: 'EA',
+      scope: {
+          clouds: '=',
+          sunnyTweets: '=',
+          leastSquaresCoeff: '='
+      },
+      link: function(scope, element, attrs) {
+
+        d3Service.d3().then(function(d3) {
+          var margin = {top: 20, right: 20, bottom: 100, left: 100},
+              width = 700 - margin.left - margin.right,
+              height = 500 - margin.top - margin.bottom;
+
+          var svg = d3.select(element[0]).append('svg')
+              .attr("width", width + margin.left + margin.right)
+              .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+              .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+          // Browser onresize event
+          window.onresize = function() {
+            scope.$apply();
+          };
+
+          scope.data = {
+            clouds: scope.clouds,
+            sunnyTweets: scope.sunnyTweets
+          }
+
+          // Watch for resize event
+          scope.$watch(function() {
+            return angular.element($window)[0].innerWidth;
+          }, function() {
+            //scope.render(scope.data);
+          });
+
+          scope.$watch('clouds', function(newData) {
+            scope.data.clouds = newData;
+          }, true);
+ 
+
+          scope.$watch('sunnyTweets', function(newData) {
+            scope.data.sunnyTweets = newData;
+          }, true);
+
+          scope.$watch('data', function(newData) {
+            var data = [];
+            if(newData.sunnyTweets.length == 0 || newData.clouds.length == 0) {
+              return;
+            }
+            
+            var current = newData.clouds[0];
+            var durations = {};
+            var counts = {};
+            var sum = 0;
+            newData.clouds.forEach(function (cloud) {
+              current = cloud
+              var next = newData.clouds[newData.clouds.indexOf(cloud) + 1]
+              if(next !== undefined) {
+                var duration = next.timestamp - cloud.timestamp;
+                sum += duration; // To calculate last entry average
+                if(durations[cloud.coverage]) {
+                  durations[cloud.coverage] += duration;
+                } else {
+                  durations[cloud.coverage] = duration;
+                }
+              } else {
+                durations[cloud.coverage] += sum / newData.clouds.length;
+              }
+            });
+
+            newData.sunnyTweets.forEach(function (sunnyTweet) {
+              var current_cloud;
+              newData.clouds.forEach(function (cloud) {
+                if(cloud.timestamp > sunnyTweet.timestamp && !current_cloud) {
+                  current_cloud = cloud;
+                }
+              });
+
+              if(current_cloud) {
+                current_cloud = newData.clouds[newData.clouds.indexOf(current_cloud)-1]
+                if(current_cloud == undefined){
+                  current_cloud = newData.clouds[0]
+                }
+              } else {
+                current_cloud = newData.clouds[newData.clouds.length-1]
+              }
+
+              if(counts[current_cloud.coverage]) {
+                counts[current_cloud.coverage] += 1;
+              } else {
+                counts[current_cloud.coverage] = 1;
+              }
+            })
+
+            var finalData = {};
+            var finalDataArray = [];
+
+            for (var key in durations) {
+              if (durations.hasOwnProperty(key)) {
+                if(counts[key]) {
+                  finalDataArray.push([key, counts[key]/durations[key]*1000000])
+                } else { 
+                  finalDataArray.push([key, 0])
+                }
+              }
+            }
+
+            finalDataArray = finalDataArray.sort(function(a,b) { return a[0] - b[0]});
+            scope.render(finalDataArray);
+          }, true);
+
+          scope.render = function(data) {
+            function leastSquares(xSeries, ySeries) {
+              var reduceSumFunc = function(prev, cur) { return prev + cur; };
+              
+              var xBar = xSeries.reduce(reduceSumFunc) * 1.0 / xSeries.length;
+              var yBar = ySeries.reduce(reduceSumFunc) * 1.0 / ySeries.length;
+
+              var ssXX = xSeries.map(function(d) { return Math.pow(d - xBar, 2); })
+                .reduce(reduceSumFunc);
+              
+              var ssYY = ySeries.map(function(d) { return Math.pow(d - yBar, 2); })
+                .reduce(reduceSumFunc);
+                
+              var ssXY = xSeries.map(function(d, i) { return (d - xBar) * (ySeries[i] - yBar); })
+                .reduce(reduceSumFunc);
+                
+              var slope = ssXY / ssXX;
+              var intercept = yBar - (xBar * slope);
+              var rSquare = Math.pow(ssXY, 2) / (ssXX * ssYY);
+              
+              return [slope, intercept, rSquare];
+            }
+
+            function make_x_axis() {        
+              return d3.svg.axis()
+                .scale(x)
+                .orient("bottom")
+                .ticks(10)
+            }
+
+            function make_y_axis() {        
+              return d3.svg.axis()
+                .scale(y)
+                .orient("left")
+                .ticks(10)
+            }
+
+            svg.selectAll('*').remove();
+            if (!data) return;
+
+            var decimalFormat = d3.format("0.2f");
+
+            var x = d3.scale.linear()
+              .range([0, width]);
+
+            var y = d3.scale.linear()
+              .domain([0, 100])
+              .range([height, 0]);
+
+            var xAxis = d3.svg.axis()
+                .scale(x)
+                .orient("bottom");
+
+            var yAxis = d3.svg.axis()
+                .scale(y)
+                .ticks(4)
+                .orient("left")
+                
+            var line = d3.svg.line()
+                .x(function(d) { return x(+d[0]); })
+                .y(function(d) { return y(d[1]); })
+
+            x.domain(d3.extent(data, function(d) { return +d[0]; }));
+            y.domain(d3.extent(data, function(d) { return d[1]; }));
+            //y.domain([0,100]);
+
+            svg.append("g")
+                .attr("class", "x axis")
+                .attr("transform", "translate(0," + height + ")")
+                .call(xAxis)
+              .append("text")
+                .attr("y", 55)
+                .attr("x", 270)
+                .style("text-anchor", "middle")
+
+                .text("Cloud coverage (%)");
+
+            svg.append("g")
+                .attr("class", "y axis")
+                .call(yAxis)
+              .append("text")
+                .attr("transform", "rotate(-90)")
+                .attr("y", -60)
+                .attr("dx", "-2.81em")
+                .style("text-anchor", "end")
+                .text("Sunny micro-tweets per second (SMTPS)");
+
+            svg.append("g")         
+              .attr("class", "grid")
+              .attr("transform", "translate(0," + height + ")")
+              .call(make_x_axis()
+                  .tickSize(-height, 0, 0)
+                  .tickFormat("")
+              )
+
+            svg.append("g")         
+                .attr("class", "grid")
+                .call(make_y_axis()
+                    .tickSize(-width, 0, 0)
+                    .tickFormat("")
+                )
+            svg.append('g')
+              .selectAll('.data-point-2')
+              .data(data)
+              .enter()
+              .append('svg:circle')
+              .attr('class', 'data-point-2')
+              .attr('cx', function(d) { return x(+d[0]) })
+              .attr('cy', function(d) { return y(d[1]) })
+              .attr('r', function() { return 5 })
+
+            // svg.append("path")
+            //   .datum(data)
+            //   .attr("class", "line")
+            //   .attr("d", line);
+
+            // get the x and y values for least squares
+            var xSeries = data.map(function(d) { return +d[0]; });
+            var ySeries = data.map(function(d) { return +d[1]; });
+            
+            var leastSquaresCoeff = leastSquares(xSeries, ySeries);
+            
+            // apply the reults of the least squares regression
+            var x1 = 0;
+            var y1 = leastSquaresCoeff[0] + leastSquaresCoeff[1];
+            var x2 = data[data.length-1][0];
+            var y2 = leastSquaresCoeff[0] * x2 + leastSquaresCoeff[1];
+            var trendData = [[x1,y1,x2,y2]];
+            
+            // Communicate with the controller
+            scope.leastSquaresCoeff = leastSquaresCoeff;
+            
+            var trendline = svg.selectAll(".trendline")
+              .data(trendData);
+
+            trendline.enter()
+              .append("line")
+              .attr("class", "trendline")
+              .attr("x1", function(d) { return x(d[0]); })
+              .attr("y1", function(d) { return y(d[1]); })
+              .attr("x2", function(d) { return x(d[2]); })
+              .attr("y2", function(d) { return y(d[3]); })
+              .attr("stroke", "black")
+              .attr("stroke-width", 1);
+            
+            // display equation on the chart
+            svg.append("text")
+              .text('y = ' + decimalFormat(leastSquaresCoeff[0]) + "x + " + 
+                decimalFormat(leastSquaresCoeff[1]))
+              .attr("class", "text-label")
+              .attr("x", function(d) {return x(x2) - 250;})
+              .attr("y", function(d) {return y(y2) - 30;});
+            
+            // display r-square on the chart
+            svg.append("text")
+              .text("R² = " + decimalFormat(leastSquaresCoeff[2]))
+              .attr("class", "text-label")
+              .attr("x", function(d) {return x(x2) - 250;})
+              .attr("y", function(d) {return y(y2) - 10;});
+          };
+        });
+      }};
+}]);
+
+weatherApp.controller('WeatherCtrl', function ($scope) {  
+    $scope.sunnyTweets = []
+    $scope.clouds = []
+    $scope.numberNewProcessed = 0
+    $scope.numberProcessed = 0
+    $scope.leastSquaresCoeff = [];
+    $scope.smtp = 0;
+    $scope.smtps = 0;
+
+    var socket = io.connect('http://' + 'localhost:8080');
+
+    socket.on('current', function (data) {
+      data = JSON.parse(data);
+      $scope.$apply(function (){
+        $scope.sunnyTweets = data.tweets;
+        $scope.clouds = data.clouds;
+        $scope.numberProcessed = data.metadata.tweets;
+        $scope.smtp = data.smtp;
+        $scope.smtps = ($scope.smtp / 3600.0) * 1000000
+      });
+    })
+
+    socket.on('tweet', function(tweet) {
+      $scope.sunnyTweets.push({timestamp: tweet[0], tweet: tweet[1]})
+      var anHourAgo = (new Date().getTime() / 1000) - 3600;
+      var smtp = 0;
+      $scope.sunnyTweets.forEach(function (sunnyTweet) {
+        if(sunnyTweet.timestamp >= anHourAgo) {
+          smtp += 1;
+        }
+      });
+      $scope.smtp = smtp;
+      $scope.smtps = ($scope.smtp / 3600.0) * 1000000
+
+      angular.element(document.querySelector('#tweets')).append('<div class="tweet sunny">' + tweet + '</div>');
+    });
+
+    socket.on('processed', function(tweet) {
+      $scope.$apply(function(){
+        $scope.numberProcessed++;
+        $scope.numberNewProcessed++;
+      });
+    });
+
+    socket.on('clouds', function(clouds) {
+      $scope.clouds.push({timestamp: clouds[0], coverage: clouds[1]})
+    });
+});
+
+weatherApp.directive('weatherIcon', function() {  
+    return {
+        restrict: 'E', replace: true,
+        scope: {
+            cloudiness: '@'
+        },
+        controller: function($scope) {
+            $scope.imgurl = function() {
+                var baseUrl = 'https' + '://ssl.gstatic.com/onebox/weather/128/';
+                if ($scope.cloudiness < 20) {
+                    return baseUrl + 'sunny.png';
+                } else if ($scope.cloudiness < 90) {
+                   return baseUrl + 'partly_cloudy.png';
+                } else {
+                    return baseUrl + 'cloudy.png';
+                }
+            };
+        },
+        template: '<div style="float:left"><img ng-src="{{ imgurl() }}"></div>'
+    };
+});
+
+</script>
+
+<div ng-app="weatherApp">
+  <div ng-controller="WeatherCtrl">
+    <div d3-bars bar-height="20" bar-padding="5" sunny-tweets="sunnyTweets" clouds="clouds" least-squares-coeff="leastSquaresCoeff"></div>
+   <!--  <h2>Weather in San Francisco, US</h2>
+    <weather-icon cloudiness="{{ weather.clouds }}"></weather-icon>
+    <h3>Current: {{ weather.clouds | temp:2 }}<clouds.all
+    min: {{ weather.temp.min | temp }}, max: {{ weather.temp.max | temp }}
+ -->
+    <div>
+      <p>The figure you see above is a living figure with ongoing data analysis on live data, coming from Twitter and the weather data API (hat tip to <a href="http://openweathermap.org">OpenWeatherMap</a>).
+      <p>In fact while you were reading this blogpost, {{numberNewProcessed}} tweets were additionally processed, brigning the grand total to {{numberProcessed}}.</p>
+      <p>Right now, my analysis is predicting {{(smtps - leastSquaresCoeff[1]) / leastSquaresCoeff[0] | number:0 }}% cloud coverage, and the actual cloud coverage is {{ clouds[clouds.length-1].coverage}}%. Not too bad.<p>
+      <p>The latest sunny tweet goes a little something like this: <span class="sunny">{{sunnyTweets[sunnyTweets.length-1].tweet}}.</span></p>
+    </div>
+  </div>
+
+</div>
+<div id="tweets"></div>
+</body>
+</html>

@@ -5,12 +5,13 @@ var server = http.createServer(app);
 var Twit = require('twit');
 var io = require('socket.io').listen(server);
 var sqlite3 = require('sqlite3').verbose();
-var db = new sqlite3.Database('experiment-result-old.sqlite');
+var db = new sqlite3.Database('experiment-result.sqlite');
 var db_archive = new sqlite3.Database('experiment-archive.sqlite');
 
 var request = require('request');
 
 db.run("CREATE TABLE IF NOT EXISTS tweets (timestamp INTEGER, tweet TEXT)");
+db.run("CREATE TABLE IF NOT EXISTS metadata (id INTEGER, tweets INTEGER, clouds INTEGER)");
 db.run("CREATE TABLE IF NOT EXISTS clouds (timestamp INTEGER PRIMARY KEY UNIQUE, coverage INTEGER)");
 db_archive.run("CREATE TABLE IF NOT EXISTS tweets (data TEXT)");
 db_archive.run("CREATE TABLE IF NOT EXISTS weather (data TEXT)");
@@ -65,6 +66,9 @@ stream.on('tweet', function(tweet) {
 io.sockets.on('connection', function(socket) {
     var clouds = [];
     var tweets = [];
+    var metadata = [];
+    var smtp = 0;
+    var anHourAgo = (new Date().getTime() / 1000) - 3600;
 
     db.each("SELECT * FROM tweets", function(err, row) {
         tweets.push(row);
@@ -72,13 +76,23 @@ io.sockets.on('connection', function(socket) {
         db.each("SELECT * FROM clouds", function(err, row) {
             clouds.push(row);
         }, function() {
-            var current = {
-                clouds: clouds,
-                tweets: tweets
-            };
+            db.each("SELECT * FROM metadata", function(err, row) {
+                metadata.push(row);
+            }, function() {
+                db.each("SELECT COUNT(*) FROM tweets WHERE timestamp >= ?", anHourAgo, function(err, row) {
+                    smtp = row['COUNT(*)'];
+                }, function() {
+                    var current = {
+                        clouds: clouds,
+                        tweets: tweets,
+                        metadata: metadata[0],
+                        smtp: smtp
+                    };
 
-            io.sockets.emit('current', JSON.stringify(current));
-            console.log('Connected to client');
+                    io.sockets.emit('current', JSON.stringify(current));
+                    console.log('Connected to client');
+                });
+            });
         });
     });
 });
