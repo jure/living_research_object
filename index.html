@@ -1,10 +1,3 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <link rel="stylesheet" type="text/css" href="http://fonts.googleapis.com/css?family=Noto+Serif:400,700,400italic|Open+Sans:700,400">
-</head>
-<body>
 <style>
 svg {
   font-family: 'Open Sans', sans-serif;
@@ -58,7 +51,7 @@ svg {
 <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.2.10/angular.min.js"></script>
 <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.2.10/angular-resource.min.js"></script>
 <script src="http://d3js.org/d3.v3.min.js"></script>
-<script src="http://localhost:8080/socket.io/socket.io.js"></script>
+<script src="http://juretriglav.si/socket.io/socket.io.js"></script>
 
 <script>
 
@@ -419,6 +412,19 @@ weatherApp.controller('WeatherCtrl', function ($scope) {
     });
 });
 
+weatherApp.filter('minmax', function() {
+    return function(input) {
+      if(+input < 0) {
+        return 0;
+      }
+      
+      if(+input > 100) {
+        return 100;
+      }
+      return input;
+    }
+});
+  
 weatherApp.directive('weatherIcon', function() {  
     return {
         restrict: 'E', replace: true,
@@ -452,14 +458,11 @@ weatherApp.directive('weatherIcon', function() {
     min: {{ weather.temp.min | temp }}, max: {{ weather.temp.max | temp }}
  -->
     <div>
-      <p>The figure you see above is a living figure with ongoing data analysis on live data, coming from Twitter and the weather data API (hat tip to <a href="http://openweathermap.org">OpenWeatherMap</a>).
-      <p>In fact while you were reading this blogpost, {{numberNewProcessed}} tweets were additionally processed, brigning the grand total to {{numberProcessed}}.</p>
-      <p>Right now, my analysis is predicting {{(smtps - leastSquaresCoeff[1]) / leastSquaresCoeff[0] | number:0 }}% cloud coverage, and the actual cloud coverage is {{ clouds[clouds.length-1].coverage}}%. Not too bad.<p>
-      <p>The latest sunny tweet goes a little something like this: <span class="sunny">{{sunnyTweets[sunnyTweets.length-1].tweet}}.</span></p>
+      <p>The figure you see above is a living figure with ongoing data analysis on live data, coming from Twitter and the weather data API (hat tip to <a href="http://openweathermap.org">OpenWeatherMap</a>). You will notice that it looks different from the original figure, the trendlines are different and the range of data is different, and that’s kind of the point.
+      <p>In fact while you were reading this blogpost, an additional <span class="sunny">{{numberNewProcessed}}</span> tweets were processed, bringing the grand total to <span class="sunny">{{numberProcessed}}</span>.</p>
+      <p>Right now, based on <span class="sunny">{{ smtps | number:0 }}</span> micro-sunny tweets per second on average in the last hour  my analysis is predicting <span class="sunny">{{(smtps - leastSquaresCoeff[1]) / leastSquaresCoeff[0] | number:0 | minmax }}%</span> cloud coverage, and the actual cloud coverage is <span class="sunny">{{ clouds[clouds.length-1].coverage}}%</span>. Room for improvement.<p>
+      <p>Just for kicks, the latest sunny tweet goes a little something like this: <span class="sunny">{{sunnyTweets[sunnyTweets.length-1].tweet}}.</span> So deep.</p>
     </div>
   </div>
 
 </div>
-<div id="tweets"></div>
-</body>
-</html>

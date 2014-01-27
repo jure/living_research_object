@@ -39,7 +39,7 @@ setInterval(function() {
 
 server.listen(8080);
 
-var locations = ['-122.75', '36.8', '-121.75', '37.8'];
+var locations = [-122.5155, 37.7038, -122.3247, 37.8545];
 
 var T = new Twit({
     consumer_key: process.env.LRO_TWITTER_CONSUMER_KEY,
@@ -56,7 +56,7 @@ stream.on('tweet', function(tweet) {
     var timestamp = new Date(Date.parse(tweet.created_at)).getTime() / 1000;
     io.sockets.emit('processed', [timestamp, tweet.text]);
     db_archive.run("INSERT INTO tweets VALUES(?)", JSON.stringify(tweet));
-    if (tweet.text.match(/\b(sunny|☀|soleado|sunshine|太陽|sunlight|#sun)\b/i)) {
+    if (tweet.text.match(/\b(sunny|☀|soleado|sunshine|太阳|阳光|sunlight|#sun)\b/i)) {
         io.sockets.emit('tweet', [timestamp, tweet.teaxt]);
         db.run("UPDATE metadata SET tweets=tweets + 1 WHERE id = 1");
         db.run("INSERT INTO tweets VALUES(?,?)", timestamp, tweet.text);
