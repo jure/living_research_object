@@ -55,10 +55,10 @@ var stream = T.stream('statuses/filter', {
 stream.on('tweet', function(tweet) {
     var timestamp = new Date(Date.parse(tweet.created_at)).getTime() / 1000;
     io.sockets.emit('processed', [timestamp, tweet.text]);
+    db.run("UPDATE metadata SET tweets=tweets + 1 WHERE id = 1");
     db_archive.run("INSERT INTO tweets VALUES(?)", JSON.stringify(tweet));
     if (tweet.text.match(/\b(sunny|☀|soleado|sunshine|太阳|阳光|sunlight|#sun)\b/i)) {
-        io.sockets.emit('tweet', [timestamp, tweet.teaxt]);
-        db.run("UPDATE metadata SET tweets=tweets + 1 WHERE id = 1");
+        io.sockets.emit('tweet', [timestamp, tweet.text]);
         db.run("INSERT INTO tweets VALUES(?,?)", timestamp, tweet.text);
         console.log(tweet.text);
     }
